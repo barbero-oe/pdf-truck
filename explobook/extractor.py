@@ -1,3 +1,4 @@
+import functools
 import itertools
 import os.path
 from typing import List, TypedDict, Dict, Any, Optional
@@ -34,7 +35,8 @@ def join_lines(paragraphs: List[Paragraph]):
     p = []
     for paragraph in paragraphs:
         lines = paragraph['lines']
-        x0 = lines[0]['words'][0]['x0']
+        x0 = min([first_word['x0'] for first_word in
+                  [line['words'][0] for line in lines]])
         bottom = lines[-1]['words'][0]['bottom']
         x1 = max([last_word['x1'] for last_word in
                   [line['words'][-1] for line in lines]])
@@ -96,11 +98,44 @@ def group_lines(words):
             for (_, w) in lines]
 
 
+def get_fonts(line):
+    fonts = itertools.groupby(line['words'], lambda word: word['fontname'])
+    return [font[0] for font in fonts]
+
+
+def line_separation(top_line, bottom_line):
+    bottom = top_line['words'][0]['bottom']
+    top = bottom_line['words'][0]['top']
+    return top - bottom
+
+
+def group_sections(group: List, line: Line):
+    if not group:
+        group.append([line])
+        return group
+    paragraph = group[-1]
+    last_line = paragraph[-1]
+    if line_separation(last_line, line) <= 2:
+        paragraph.append(line)
+    else:
+        group.append([line])
+    return group
+
+
 def group_paragraphs(lines):
-    paragraphs = itertools.groupby(lines, lambda line: line['words'][0]['x0'])
+    sections = functools.reduce(group_sections, lines, [])
     return [{'kind': 'paragraph',
-             'lines': list(lines)}
-            for (_, lines) in paragraphs]
+             'lines': p} for p in sections]
+
+    # paragraphs = itertools.groupby(lines, lambda line: line['words'][0]['x0'])
+    # return [{'kind': 'paragraph',
+    #          'lines': list(lines)}
+    #         for (_, lines) in paragraphs]
+
+
+# line_fonts = get_fonts(line)
+# next_line_fonts = get_fonts(next_line)
+# intersection = [value for value in line_fonts if value in next_line_fonts]
 
 
 def save_page(page: dict, out: str):
