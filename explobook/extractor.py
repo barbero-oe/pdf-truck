@@ -9,7 +9,8 @@ from pdfplumber.display import PageImage
 from pdfplumber.page import Page
 from pdfplumber.table import Table
 
-from explobook.model import Word, Line, Section
+from explobook import model
+from explobook.model import Word, Line, Section, TableText, Cell, Row
 
 
 def crop(page: Page):
@@ -29,72 +30,16 @@ def normalize(words: List[Word]) -> List[Word]:
             for word in words]
 
 
-# def detect_paragraph(section: Section) -> Section:
-#     lines: List[Line] = [line for line in section.elements]
-#     groups = list(itertools.groupby(lines, lambda el: el.words[0]['x0']))
-#     normal_indent = min({group[0] for group in groups})
-#     paragraphs: List[List[Line]] = []
-#     for indent, grouped_elements in itertools.groupby(lines, lambda el: el.words[0]['x0']):
-#         if indent != normal_indent or not paragraphs:
-#             paragraphs.append(list(grouped_elements))
-#         else:
-#             paragraphs[-1].extend(list(grouped_elements))
-#     return Section([Paragraph(lines=paragraph)
-#                     for paragraph in paragraphs])
-#
-#
-# def detect_elements(sections: List[Section]) -> List[Section]:
-#     return [detect_paragraph(section) for section in sections]
-
-
 def extract(path: str, out: str, pages: Optional[int] = None):
     with pdfplumber.open(path) as pdf:
         for page in pdf.pages:
             cropped = crop(page)
             (tables, sections) = extract_text(cropped)
-            page_dict = {'page_number': page.page_number,
-                         'sections': [s.as_dict() for s in sections],
-                         'tables': [t.as_dict() for t in tables]}
-            save_page(page_dict, out)
-            print_image(cropped, sections, tables, out)
+            p = model.Page(page.page_number, sections, tables)
+            save_page(p, out)
+            print_image(cropped, p, out)
             if pages == cropped.page_number:
                 break
-
-
-class Cell:
-    def __init__(self, sections: List[Section]):
-        self.sections = sections
-
-    def text(self):
-        return " ".join([section.text() for section in self.sections])
-
-    def as_dict(self):
-        return {'kind': 'cell',
-                'text': self.text(),
-                'sections': [section.as_dict() for section in self.sections]}
-
-
-class Row:
-    def __init__(self, cells: List[Cell]):
-        self.cells = cells
-
-    def text(self):
-        return " | ".join([cell.text() for cell in self.cells])
-
-    def as_dict(self):
-        return {'kind': 'row',
-                'text': self.text(),
-                'cells': [cell.as_dict() for cell in self.cells]}
-
-
-class TableText:
-    def __init__(self, rows: List[Row], box: Tuple):
-        self.rows = rows
-        self.box = box
-
-    def as_dict(self):
-        return {'kind': 'table',
-                'rows': [row.as_dict() for row in self.rows]}
 
 
 def parse_table(page: Page, table: Table) -> TableText:
@@ -171,24 +116,24 @@ def group_sections(lines: List[Line]) -> List[Section]:
     return [Section(section) for section in sections]
 
 
-def save_page(page: dict, out: str):
-    name = str(page['page_number']).rjust(3, "0") + ".yaml"
+def save_page(page: model.Page, out: str):
+    name = str(page.number).rjust(3, "0") + ".yaml"
     filepath = os.path.join(out, name)
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
     with open(filepath, 'w') as file:
-        yaml.dump(page, file)
+        yaml.dump(page.as_dict(), file)
 
 
 GREEN = (0, 255, 0, 50)
 RED = (255, 0, 0, 50)
 
 
-def print_image(page, sections, tables: List[TableText], out: str):
-    name = str(page.page_number).rjust(3, "0") + ".jpeg"
+def print_image(page, model_page: model.Page, out: str):
+    name = str(model_page.number).rjust(3, "0") + ".jpeg"
     filepath = os.path.join(out, name)
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
     with open(filepath, 'w') as file:
         img: PageImage = page.to_image(resolution=150)
-        img.draw_rects([section.box() for section in sections])
-        img.draw_rects([table.box for table in tables], fill=GREEN)
+        img.draw_rects([section.box() for section in model_page.sections])
+        img.draw_rects([table.box for table in model_page.tables], fill=GREEN)
         img.save(file)

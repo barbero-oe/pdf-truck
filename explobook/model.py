@@ -1,4 +1,4 @@
-from typing import TypedDict, List
+from typing import TypedDict, List, Tuple
 
 
 class Word(TypedDict):
@@ -57,6 +57,54 @@ class Section:
         return {'kind': 'section',
                 'text': self.text(),
                 'lines': [line.as_dict() for line in self.lines]}
+
+
+class Cell:
+    def __init__(self, sections: List[Section]):
+        self.sections = sections
+
+    def text(self):
+        return " ".join([section.text() for section in self.sections])
+
+    def as_dict(self):
+        return {'kind': 'cell',
+                'text': self.text(),
+                'sections': [section.as_dict() for section in self.sections]}
+
+
+class Row:
+    def __init__(self, cells: List[Cell]):
+        self.cells = cells
+
+    def text(self):
+        return " | ".join([cell.text() for cell in self.cells])
+
+    def as_dict(self):
+        return {'kind': 'row',
+                'text': self.text(),
+                'cells': [cell.as_dict() for cell in self.cells]}
+
+
+class TableText:
+    def __init__(self, rows: List[Row], box: Tuple):
+        self.rows = rows
+        self.box = box
+
+    def as_dict(self):
+        return {'kind': 'table',
+                'rows': [row.as_dict() for row in self.rows]}
+
+
+class Page:
+    def __init__(self, number, sections: List[Section], tables: List[TableText]):
+        self.number = number
+        self.sections = sections
+        self.tables = tables
+
+    def as_dict(self):
+        return {'number': self.number,
+                'sections': [s.as_dict() for s in self.sections],
+                'tables': [t.as_dict() for t in self.tables]}
 
 
 def calculate_box(lines: List[Line]):
