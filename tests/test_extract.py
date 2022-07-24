@@ -16,4 +16,5 @@ def out_directory(pytestconfig: Config):
 
 
 def test_extraction(rh_book: str, out_directory):
-    extract(rh_book, out_directory, 25)
+    extract(rh_book, out_directory, 50)
+    # extract(rh_book, out_directory)
