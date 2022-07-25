@@ -10,6 +10,7 @@ from pdfplumber.page import Page
 from pdfplumber.table import Table
 
 from explobook import model
+from explobook.classifier import classify, Document
 from explobook.model import Word, Line, Section, TableText, Cell, Row
 
 
@@ -23,6 +24,7 @@ def extract_words(page: Page) -> List[Word]:
 
 def normalize(words: List[Word]) -> List[Word]:
     return [Word(**{**word,
+                    'size': int(word['size']),
                     'x0': int(word['x0']),
                     'x1': int(word['x1']),
                     'bottom': int(word['bottom']),
@@ -36,10 +38,32 @@ def extract(path: str, out: str, pages: Optional[int] = None):
             cropped = crop(page)
             (tables, sections) = extract_text(cropped)
             p = model.Page(page.page_number, sections, tables)
-            save_page(p, out)
-            print_image(cropped, p, out)
+            # save_page(p, out)
+            # print_image(cropped, p, out)
+            document = classify(p)
+            save_document(page, document, out)
+            print_classification(page, document, out)
             if pages == cropped.page_number:
                 break
+
+
+def save_document(page: Page, document: Document, out: str):
+    name = str(page.page_number).rjust(3, "0") + ".yaml"
+    filepath = os.path.join(out, "classification", name)
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+    with open(filepath, 'w') as file:
+        yaml.dump([h.as_dict() for h in document.headers()], file)
+
+
+def print_classification(page: Page, document: Document, out: str):
+    name = str(page.page_number).rjust(3, "0") + ".jpeg"
+    filepath = os.path.join(out, "classification", name)
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+    with open(filepath, 'w') as file:
+        img: PageImage = page.to_image(resolution=150)
+        headers = [header.box for header in document.headers()]
+        img.draw_rects(headers, fill=ORANGE)
+        img.save(file)
 
 
 def parse_table(page: Page, table: Table) -> TableText:
@@ -69,7 +93,8 @@ def remove_tables(page: Page) -> List[Word]:
     for table in tables:
         table_words = extract_words(page.within_bbox(table.bbox))
         for word in table_words:
-            words.remove(word)
+            if word in words:
+                words.remove(word)
     return words
 
 
@@ -125,6 +150,7 @@ def save_page(page: model.Page, out: str):
 
 
 GREEN = (0, 255, 0, 50)
+ORANGE = (255, 165, 0, 50)
 RED = (255, 0, 0, 50)
 
 
@@ -135,5 +161,5 @@ def print_image(page, model_page: model.Page, out: str):
     with open(filepath, 'w') as file:
         img: PageImage = page.to_image(resolution=150)
         img.draw_rects([section.box() for section in model_page.sections])
-        img.draw_rects([table.box for table in model_page.tables], fill=GREEN)
+        img.draw_rects([table.box() for table in model_page.tables], fill=GREEN)
         img.save(file)

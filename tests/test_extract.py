@@ -12,6 +12,7 @@ def rh_book(pytestconfig: Config) -> str:
 
 @fixture
 def out_directory(pytestconfig: Config):
+    # return os.path.join(pytestconfig.rootpath, "out", "rastreadores-hogueras")
     return os.path.join(pytestconfig.rootpath, "out", "test")
 
 
