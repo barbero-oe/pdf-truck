@@ -37,18 +37,23 @@ def extract(path: str, out: str, pages: Optional[List[int]] = None):
         pages_to_fetch = pages if pages else range(len(pdf.pages))
         for page_number in pages_to_fetch:
             page = pdf.pages[page_number]
-            cropped = crop(page)
-            (tables, sections) = extract_text(cropped)
-            p = model.Page(page.page_number, sections, tables)
-            save_page(p, out)
-            print_image(cropped, p, out)
-            document = classify(p)
-            save_document(cropped, document, out)
-            print_classification(cropped, document, out)
+            document = parse_page(page)
+            save_document(page.page_number, document, out)
+            # save_page(p, out)
+            # print_image(cropped, p, out)
+            # print_classification(cropped, document, out)
 
 
-def save_document(page: Page, document: Document, out: str):
-    name = str(page.page_number).rjust(3, "0") + ".yaml"
+def parse_page(page) -> Document:
+    cropped = crop(page)
+    (tables, sections) = extract_text(cropped)
+    p = model.Page(page.page_number, sections, tables)
+    document = classify(p)
+    return document
+
+
+def save_document(page_number: int, document: Document, out: str):
+    name = str(page_number).rjust(3, "0") + ".yaml"
     filepath = os.path.join(out, "classification", name)
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
     with open(filepath, 'w') as file:
