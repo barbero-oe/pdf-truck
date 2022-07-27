@@ -32,19 +32,19 @@ def normalize(words: List[Word]) -> List[Word]:
             for word in words]
 
 
-def extract(path: str, out: str, pages: Optional[int] = None):
+def extract(path: str, out: str, pages: Optional[List[int]] = None):
     with pdfplumber.open(path) as pdf:
-        for page in pdf.pages:
+        pages_to_fetch = pages if pages else range(len(pdf.pages))
+        for page_number in pages_to_fetch:
+            page = pdf.pages[page_number]
             cropped = crop(page)
             (tables, sections) = extract_text(cropped)
             p = model.Page(page.page_number, sections, tables)
-            # save_page(p, out)
-            # print_image(cropped, p, out)
+            save_page(p, out)
+            print_image(cropped, p, out)
             document = classify(p)
-            save_document(page, document, out)
-            print_classification(page, document, out)
-            if pages == cropped.page_number:
-                break
+            save_document(cropped, document, out)
+            print_classification(cropped, document, out)
 
 
 def save_document(page: Page, document: Document, out: str):
@@ -107,9 +107,19 @@ def extract_text(page: Page) -> Tuple[List[TableText], List[Section]]:
 
 
 def group_lines(words: List[Word]) -> List[Line]:
-    lines = itertools.groupby(words, lambda w: w['bottom'])
-    return [Line(list(w))
-            for (_, w) in lines]
+    def group_by_baseline(lines: List[List[Word]], word: Word) -> List[List[Word]]:
+        if not lines:
+            return [[word]]
+        line = lines[-1]
+        baseline = line[-1]['bottom']
+        if abs(baseline - word['bottom']) <= 1:
+            line.append(word)
+        else:
+            lines.append([word])
+        return lines
+
+    lines = functools.reduce(group_by_baseline, words, [])
+    return [Line(line) for line in lines]
 
 
 def get_fonts(line):
@@ -125,8 +135,7 @@ def line_separation(top_line: Line, bottom_line: Line) -> float:
 
 def detect_sections(group: List[List[Line]], line: Line) -> List[List[Line]]:
     if not group:
-        group.append([line])
-        return group
+        return [[line]]
     paragraph = group[-1]
     last_line = paragraph[-1]
     if line_separation(last_line, line) <= 2:

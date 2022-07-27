@@ -129,8 +129,20 @@ def try_header(lines: List[Line]) -> Optional[List[Header]]:
         return None
     first_word = lines[0].words[0]
     size = first_word['size']
-    big = size > 10 and (is_bold(first_word) or is_medium(first_word))
+    big = size >= 10 and (is_bold(first_word) or is_medium(first_word))
     if not big:
+        return None
+
+    def could_be_listing(lines):
+        def begins_with_number(line):
+            first_letter = line.words[0]['text'][0]
+            return first_letter.isnumeric()
+
+        if len(lines) == 1:
+            return False
+        return all([begins_with_number(line) for line in lines])
+
+    if could_be_listing(lines):
         return None
     header = classify_header(lines[0])
     return [header] if len(lines) == 1 else [header, format_text(lines[1].words)]
