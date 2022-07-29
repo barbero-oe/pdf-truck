@@ -26,6 +26,9 @@ class Line:
                 'text': self.text(),
                 'words': [word for word in self.words]}
 
+    def __str__(self):
+        return self.text()
+
 
 class Paragraph:
     def __init__(self, lines: List[Line]):

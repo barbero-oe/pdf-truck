@@ -3,7 +3,7 @@ import os
 import pdfplumber
 from pytest import fixture, Config
 
-from explobook.extractor import parse_page
+from explobook.extractor import parse_page, extract
 
 
 @fixture
@@ -36,6 +36,10 @@ def page_19(rh_book):
         yield pdf.pages[19], structure
 
 
+def test_print_page(rh_book, out_directory):
+    extract(rh_book, out_directory, [19])
+
+
 def test_validate_titles(page_19):
     page, structure = page_19
     actual = parse_page(page)
@@ -47,6 +51,22 @@ def test_validate_titles(page_19):
     for expected, actual in values:
         assert expected['level'] == actual.level
         assert expected['text'] in actual.text()
+
+
+def test_validate_numbered_list(page_19):
+    page, structure = page_19
+    parsed_page = parse_page(page)
+
+    expected_ol = [el for el in structure if el['kind'] == 'ol']
+    actual_ol = parsed_page.ordered_lists()
+
+    assert len(expected_ol) == len(actual_ol)
+    values = zip(expected_ol, actual_ol)
+    for expected, actual in values:
+        assert len(expected['items']) == len(actual.items())
+        items = zip(expected['items'], actual.items())
+        for exp, act in items:
+            assert exp in " ".join(formatted.text for formatted in act)
 
 
 # def test_extraction(rh_book: str, out_directory):

@@ -39,6 +39,7 @@ def extract(path: str, out: str, pages: Optional[List[int]] = None):
             page = pdf.pages[page_number]
             document = parse_page(page)
             save_document(page.page_number, document, out)
+            print_classification(page, document, out)
             # save_page(p, out)
             # print_image(cropped, p, out)
             # print_classification(cropped, document, out)
@@ -68,6 +69,8 @@ def print_classification(page: Page, document: Document, out: str):
         img: PageImage = page.to_image(resolution=150)
         headers = [header.box for header in document.headers()]
         img.draw_rects(headers, fill=ORANGE)
+        ols = [ol.box for ol in document.ordered_lists()]
+        img.draw_rects(ols, fill=YELLOW)
         img.save(file)
 
 
@@ -165,6 +168,7 @@ def save_page(page: model.Page, out: str):
 
 GREEN = (0, 255, 0, 50)
 ORANGE = (255, 165, 0, 50)
+YELLOW = (255, 255, 0, 50)
 RED = (255, 0, 0, 50)
 
 

@@ -17,7 +17,7 @@
 import itertools
 from typing import List, Optional, Union
 
-from explobook.model import Page, Section, Line, Word, calculate_box
+from explobook.model import Page, Line, Word, calculate_box
 
 FONTS = [
     "Black",
@@ -46,6 +46,15 @@ class FormattedText:
         return self.text
 
 
+class OrderedList:
+    def __init__(self, items: List[List[FormattedText]], box):
+        self._items = items
+        self.box = box
+
+    def items(self):
+        return self._items
+
+
 class Header:
     def __init__(self, level: str, formatted_text: List[FormattedText], box):
         self.level = level
@@ -63,8 +72,7 @@ class Header:
                 'box': self.box}
 
     def __str__(self):
-        text = " ".join(str(t) for t in self.text)
-        return f"{self.level}: {text}"
+        return f"{self.level}: {self.text()}"
 
 
 class Document:
@@ -78,6 +86,9 @@ class Document:
         return {'kind': 'document',
                 'elements': [el.as_dict() for el in self.elements if el.as_dict]}
 
+    def ordered_lists(self):
+        return [el for el in self.elements if isinstance(el, OrderedList)]
+
 
 # items: List[Union[Section, TableText]] = []
 # items.extend(page.sections)
@@ -86,16 +97,60 @@ class Document:
 def classify(page: Page) -> Document:
     items = []
     for section in page.sections:
-        items.extend(classify_item(section))
+        items.extend(classify_lines(section.lines))
     return Document(items)
 
 
-def classify_item(section: Section):
-    lines = section.lines
+def classify_lines(lines: List[Line]) -> List:
+    if not lines:
+        return lines
     if header := try_header(lines):
         return header
+    elif ol := try_ol(lines):
+        return ol
     else:
-        return section.lines
+        return lines
+
+
+def is_ordered_list_item(line):
+    first_word: str = line.words[0]['text']
+    if len(first_word) == 1:
+        return False
+    return first_word[0].isnumeric() and not first_word[1].isalpha()
+
+
+def try_ol(lines: List[Line]) -> List:
+    ordered = [line for line in lines if is_ordered_list_item(line)]
+    if not ordered:
+        return lines
+    ol = group_list_items(lines, ordered)
+
+    items = list(itertools.chain(*ol))
+    no_items = [line for line in lines if line not in items]
+
+    ordered_list = tokenize_ordered_list(ol)
+    return [*classify_lines(no_items), ordered_list]
+
+
+def tokenize_ordered_list(ol: List[List[Line]]):
+    items = []
+    for item in ol:
+        words = list(itertools.chain(*[line.words for line in item]))
+        items.append(format_text(words))
+    box = calculate_box(list(itertools.chain(*ol)))
+    return OrderedList(items, box)
+
+
+def group_list_items(lines: List[Line], list_item_start: List[Line]) -> List[List[Line]]:
+    ol = []
+    item = []
+    for line in lines:
+        if line in list_item_start:
+            item = [line]
+            ol.append(item)
+        else:
+            item.append(line)
+    return ol
 
 
 def is_bold(word: Union[Word, str]):
