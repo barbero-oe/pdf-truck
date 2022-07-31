@@ -71,6 +71,10 @@ def print_classification(page: Page, document: Document, out: str):
         img.draw_rects(headers, fill=ORANGE)
         ols = [ol.box for ol in document.ordered_lists()]
         img.draw_rects(ols, fill=YELLOW)
+        lists = [ol.box for ol in document.lists()]
+        img.draw_rects(lists, fill=RED)
+        p = [ol.box for ol in document.paragraphs()]
+        img.draw_rects(p)
         img.save(file)
 
 

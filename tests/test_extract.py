@@ -37,7 +37,8 @@ def page_19(rh_book):
 
 
 def test_print_page(rh_book, out_directory):
-    extract(rh_book, out_directory, [19])
+    # extract(rh_book, out_directory, [25])
+    extract(rh_book, out_directory, range(50))
 
 
 def test_validate_titles(page_19):
@@ -59,6 +60,22 @@ def test_validate_numbered_list(page_19):
 
     expected_ol = [el for el in structure if el['kind'] == 'ol']
     actual_ol = parsed_page.ordered_lists()
+
+    assert len(expected_ol) == len(actual_ol)
+    values = zip(expected_ol, actual_ol)
+    for expected, actual in values:
+        assert len(expected['items']) == len(actual.items())
+        items = zip(expected['items'], actual.items())
+        for exp, act in items:
+            assert exp in " ".join(formatted.text for formatted in act)
+
+
+def xtest_validate_list(page_19):
+    page, structure = page_19
+    parsed_page = parse_page(page)
+
+    expected_ol = [el for el in structure if el['kind'] == 'ol']
+    actual_ol = parsed_page.lists()
 
     assert len(expected_ol) == len(actual_ol)
     values = zip(expected_ol, actual_ol)

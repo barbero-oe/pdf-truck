@@ -15,7 +15,7 @@
 # def detect_elements(sections: List[Section]) -> List[Section]:
 #     return [detect_paragraph(section) for section in sections]
 import itertools
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Callable
 
 from explobook.model import Page, Line, Word, calculate_box
 
@@ -46,13 +46,29 @@ class FormattedText:
         return self.text
 
 
-class OrderedList:
-    def __init__(self, items: List[List[FormattedText]], box):
+class Paragraph:
+    def __init__(self, text: List[FormattedText], box):
+        self.text = text
+        self.box = box
+
+    def __str__(self):
+        return " ".join([t.text for t in self.text])
+
+
+class Listing:
+    def __init__(self, kind: str, items: List[List[FormattedText]], box):
+        self.kind = kind
         self._items = items
         self.box = box
 
     def items(self):
         return self._items
+
+    def __str__(self):
+        items = []
+        for item in self._items:
+            items.append(" ".join(text.text for text in item)[0:30] + "...")
+        return str(items)
 
 
 class Header:
@@ -87,13 +103,15 @@ class Document:
                 'elements': [el.as_dict() for el in self.elements if el.as_dict]}
 
     def ordered_lists(self):
-        return [el for el in self.elements if isinstance(el, OrderedList)]
+        return [el for el in self.elements if isinstance(el, Listing) and el.kind == 'ordered']
+
+    def lists(self):
+        return [el for el in self.elements if isinstance(el, Listing) and el.kind == 'unordered']
+
+    def paragraphs(self):
+        return [el for el in self.elements if isinstance(el, Paragraph)]
 
 
-# items: List[Union[Section, TableText]] = []
-# items.extend(page.sections)
-# items.extend(page.tables)
-# items.sort(key=lambda x: x.box()[-1])
 def classify(page: Page) -> Document:
     items = []
     for section in page.sections:
@@ -108,8 +126,23 @@ def classify_lines(lines: List[Line]) -> List:
         return header
     elif ol := try_ol(lines):
         return ol
+    elif ul := try_ul(lines):
+        return ul
     else:
-        return lines
+        return paragraph(lines)
+
+
+def paragraph(lines: List[Line]):
+    if not lines:
+        return None
+    box = calculate_box(lines)
+    words = list(itertools.chain(*[line.words for line in lines]))
+    return [Paragraph(format_text(words), box)]
+
+
+def is_unordered_list_item(line):
+    first_word: str = line.words[0]['text']
+    return first_word[0] in '-*#>•'
 
 
 def is_ordered_list_item(line):
@@ -120,25 +153,34 @@ def is_ordered_list_item(line):
 
 
 def try_ol(lines: List[Line]) -> List:
-    ordered = [line for line in lines if is_ordered_list_item(line)]
+    return try_list(lines, is_ordered_list_item, 'ordered')
+
+
+def try_ul(lines):
+    return try_list(lines, is_unordered_list_item, 'unordered')
+
+
+def try_list(lines: List[Line], starts_item: Callable[[Line], bool], kind: str) -> Optional[List]:
+    ordered = [line for line in lines if starts_item(line)]
     if not ordered:
-        return lines
+        return None
     ol = group_list_items(lines, ordered)
 
     items = list(itertools.chain(*ol))
     no_items = [line for line in lines if line not in items]
 
-    ordered_list = tokenize_ordered_list(ol)
-    return [*classify_lines(no_items), ordered_list]
+    list_items, box = tokenize_list(ol)
+    listing = Listing(kind, list_items, box)
+    return [*classify_lines(no_items), listing]
 
 
-def tokenize_ordered_list(ol: List[List[Line]]):
+def tokenize_list(ol: List[List[Line]]):
     items = []
     for item in ol:
         words = list(itertools.chain(*[line.words for line in item]))
         items.append(format_text(words))
     box = calculate_box(list(itertools.chain(*ol)))
-    return OrderedList(items, box)
+    return items, box
 
 
 def group_list_items(lines: List[Line], list_item_start: List[Line]) -> List[List[Line]]:
@@ -199,17 +241,17 @@ def is_all_caps(line: Line) -> bool:
 
 
 def try_header(lines: List[Line]) -> Optional[List[Header]]:
-    if len(lines) > 2:
+    if not lines:
         return None
-    if not is_all_caps(lines[0]):
-        return None
-    first_word = lines[0].words[0]
+    first_line, rest = lines[0], lines[1:]
+    first_word = first_line.words[0]
     size = first_word['size']
-    big = size >= 10 and (is_bold(first_word) or is_medium(first_word))
-    if not big:
+    medium = size == 10 and all([is_medium(word) or is_bold(word) for word in first_line.words])
+    big = is_all_caps(first_line) and size >= 10 and (is_bold(first_word) or is_medium(first_word))
+    if not big and not medium:
         return None
-    header = classify_header(lines[0])
-    return [header] if len(lines) == 1 else [header, format_text(lines[1].words)]
+    header = classify_header(first_line)
+    return [header, *classify_lines(rest)] if rest else [header]
 
 
 def font_style(font_name: str):
