@@ -1,23 +1,8 @@
-# def detect_paragraph(section: Section) -> Section:
-#     lines: List[Line] = [line for line in section.elements]
-#     groups = list(itertools.groupby(lines, lambda el: el.words[0]['x0']))
-#     normal_indent = min({group[0] for group in groups})
-#     paragraphs: List[List[Line]] = []
-#     for indent, grouped_elements in itertools.groupby(lines, lambda el: el.words[0]['x0']):
-#         if indent != normal_indent or not paragraphs:
-#             paragraphs.append(list(grouped_elements))
-#         else:
-#             paragraphs[-1].extend(list(grouped_elements))
-#     return Section([Paragraph(lines=paragraph)
-#                     for paragraph in paragraphs])
-#
-#
-# def detect_elements(sections: List[Section]) -> List[Section]:
-#     return [detect_paragraph(section) for section in sections]
+import functools
 import itertools
 from typing import List, Optional, Union, Callable
 
-from explobook.model import Page, Line, Word, calculate_box
+from explobook.model import Page, Line, Word, calculate_box, TableText
 
 FONTS = [
     "Black",
@@ -92,8 +77,12 @@ class Header:
 
 
 class Document:
-    def __init__(self, elements):
+    def __init__(self, elements, tables):
         self.elements = elements
+        self.tables = tables
+
+    def all_elements(self):
+        sorted(list(itertools.chain(self.elements, self.tables)), key=lambda el: el.box)
 
     def headers(self):
         return [el for el in self.elements if isinstance(el, Header)]
@@ -116,7 +105,11 @@ def classify(page: Page) -> Document:
     items = []
     for section in page.sections:
         items.extend(classify_lines(section.lines))
-    return Document(items)
+    return Document(items, page.tables)
+
+
+def classify_tables(tables: List[TableText]):
+    pass
 
 
 def classify_lines(lines: List[Line]) -> List:
@@ -135,9 +128,33 @@ def classify_lines(lines: List[Line]) -> List:
 def paragraph(lines: List[Line]):
     if not lines:
         return None
+    min_indent = min(line.words[0]['x0'] for line in lines)
+    if min_indent >= 120:
+        return [create_paragraph(lines)]
+    else:
+        return grouped_paragraphs(min_indent, lines)
+
+
+def create_paragraph(lines: List[Line]) -> Paragraph:
     box = calculate_box(lines)
+    fix_word_breaks(lines)
     words = list(itertools.chain(*[line.words for line in lines]))
-    return [Paragraph(format_text(words), box)]
+    return Paragraph(format_text(words), box)
+
+
+def grouped_paragraphs(min_indent: float, lines: List[Line]) -> List[Paragraph]:
+    def group(paragraphs: List[List[Line]], line: Line) -> List[List[Line]]:
+        if not paragraphs:
+            return [[line]]
+        indent = line.words[0]['x0']
+        if indent >= min_indent + 2:
+            paragraphs.append([line])
+        else:
+            paragraphs[-1].append(line)
+        return paragraphs
+
+    paragraphs_grouped = functools.reduce(group, lines, [])
+    return [create_paragraph(p_lines) for p_lines in paragraphs_grouped]
 
 
 def is_unordered_list_item(line):
@@ -174,9 +191,20 @@ def try_list(lines: List[Line], starts_item: Callable[[Line], bool], kind: str) 
     return [*classify_lines(no_items), listing]
 
 
+def fix_word_breaks(lines: List[Line]) -> List[Line]:
+    for index in range(len(lines) - 2):
+        if lines[index].words:
+            last_word = lines[index].words[-1]
+            next_line_word = lines[index + 1].words[0]
+            if last_word['text'][-1] == '-':
+                last_word['text'] = last_word['text'][0:-2] + next_line_word['text']
+                lines[index + 1].words.remove(next_line_word)
+
+
 def tokenize_list(ol: List[List[Line]]):
     items = []
     for item in ol:
+        fix_word_breaks(item)
         words = list(itertools.chain(*[line.words for line in item]))
         items.append(format_text(words))
     box = calculate_box(list(itertools.chain(*ol)))

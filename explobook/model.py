@@ -91,10 +91,7 @@ class Row:
 class TableText:
     def __init__(self, rows: List[Row], box: Tuple):
         self.rows = rows
-        self._box = box
-
-    def box(self):
-        return self._box
+        self.box = box
 
     def as_dict(self):
         return {'kind': 'table',
