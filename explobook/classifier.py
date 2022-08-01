@@ -1,8 +1,9 @@
 import functools
 import itertools
-from typing import List, Optional, Union, Callable
+from typing import List, Optional, Callable
 
-from explobook.model import Page, Line, Word, calculate_box, TableText
+from explobook.model import Page, Line, calculate_box, TableText, Paragraph, Listing, \
+    Header, Document, fix_word_breaks, is_bold, is_medium, format_text
 
 FONTS = [
     "Black",
@@ -15,90 +16,6 @@ FONTS = [
     "Normal",
     "NormalItalic",
 ]
-
-
-class FormattedText:
-    def __init__(self, style: str, text: str):
-        self.style = style
-        self.text = text
-
-    def as_dict(self):
-        return {'kind': 'text',
-                'style': self.style,
-                'text': self.text}
-
-    def __str__(self):
-        return self.text
-
-
-class Paragraph:
-    def __init__(self, text: List[FormattedText], box):
-        self.text = text
-        self.box = box
-
-    def __str__(self):
-        return " ".join([t.text for t in self.text])
-
-
-class Listing:
-    def __init__(self, kind: str, items: List[List[FormattedText]], box):
-        self.kind = kind
-        self._items = items
-        self.box = box
-
-    def items(self):
-        return self._items
-
-    def __str__(self):
-        items = []
-        for item in self._items:
-            items.append(" ".join(text.text for text in item)[0:30] + "...")
-        return str(items)
-
-
-class Header:
-    def __init__(self, level: str, formatted_text: List[FormattedText], box):
-        self.level = level
-        self.formatted_text = formatted_text
-        self.box = box
-
-    def text(self):
-        return " ".join(text.text for text in self.formatted_text)
-
-    def as_dict(self):
-        return {'kind': 'header',
-                'level': self.level,
-                'formatted_text': [t.as_dict() for t in self.formatted_text],
-                'text': self.text(),
-                'box': self.box}
-
-    def __str__(self):
-        return f"{self.level}: {self.text()}"
-
-
-class Document:
-    def __init__(self, elements, tables):
-        self.elements = elements
-        self.tables = tables
-
-    def all_elements(self):
-        sorted(list(itertools.chain(self.elements, self.tables)), key=lambda el: el.box)
-
-    def headers(self):
-        return [el for el in self.elements if isinstance(el, Header)]
-
-    def as_dict(self):
-        return {'kind': 'document',
-                'elements': [el.as_dict() for el in self.elements if el.as_dict]}
-
-    def ordered_lists(self):
-        return [el for el in self.elements if isinstance(el, Listing) and el.kind == 'ordered']
-
-    def lists(self):
-        return [el for el in self.elements if isinstance(el, Listing) and el.kind == 'unordered']
-
-    def paragraphs(self):
-        return [el for el in self.elements if isinstance(el, Paragraph)]
 
 
 def classify(page: Page) -> Document:
@@ -191,16 +108,6 @@ def try_list(lines: List[Line], starts_item: Callable[[Line], bool], kind: str) 
     return [*classify_lines(no_items), listing]
 
 
-def fix_word_breaks(lines: List[Line]) -> List[Line]:
-    for index in range(len(lines) - 2):
-        if lines[index].words:
-            last_word = lines[index].words[-1]
-            next_line_word = lines[index + 1].words[0]
-            if last_word['text'][-1] == '-':
-                last_word['text'] = last_word['text'][0:-2] + next_line_word['text']
-                lines[index + 1].words.remove(next_line_word)
-
-
 def tokenize_list(ol: List[List[Line]]):
     items = []
     for item in ol:
@@ -221,22 +128,6 @@ def group_list_items(lines: List[Line], list_item_start: List[Line]) -> List[Lis
         else:
             item.append(line)
     return ol
-
-
-def is_bold(word: Union[Word, str]):
-    font = word if isinstance(word, str) else word['fontname']
-    bold = "Black" in font or "Bold" in font
-    return bold
-
-
-def is_italic(word: Union[Word, str]):
-    font = word if isinstance(word, str) else word['fontname']
-    return "Italic" in font
-
-
-def is_medium(word: Union[Word, str]):
-    font = word if isinstance(word, str) else word['fontname']
-    return "Medium" in font
 
 
 def header_level(line: Line) -> str:
@@ -282,24 +173,3 @@ def try_header(lines: List[Line]) -> Optional[List[Header]]:
     return [header, *classify_lines(rest)] if rest else [header]
 
 
-def font_style(font_name: str):
-    bold = is_bold(font_name) or is_medium(font_name)
-    italic = is_italic(font_name)
-    if bold and italic:
-        return 'bold-italic'
-    elif bold:
-        return 'bold'
-    elif italic:
-        return 'italic'
-    else:
-        return 'normal'
-
-
-def format_text(words: List[Word]) -> List[FormattedText]:
-    words_by_font = itertools.groupby(words, lambda w: w['fontname'])
-    formatted_text = []
-    for font, grouped_words in words_by_font:
-        style = font_style(font)
-        text = " ".join(word['text'] for word in grouped_words)
-        formatted_text.append(FormattedText(style, text))
-    return formatted_text

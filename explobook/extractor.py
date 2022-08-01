@@ -10,8 +10,9 @@ from pdfplumber.page import Page
 from pdfplumber.table import Table
 
 from explobook import model
-from explobook.classifier import classify, Document
-from explobook.model import Word, Line, Section, TableText, Cell, Row
+from explobook.classifier import classify
+from explobook.exporter import export
+from explobook.model import Word, Line, Section, TableText, Cell, Row, Document
 
 
 def crop(page: Page):
@@ -33,16 +34,20 @@ def normalize(words: List[Word]) -> List[Word]:
 
 
 def extract(path: str, out: str, pages: Optional[List[int]] = None):
+    documents = []
     with pdfplumber.open(path) as pdf:
         pages_to_fetch = pages if pages else range(len(pdf.pages))
         for page_number in pages_to_fetch:
+            print(f'Processing page {str(page_number).ljust(3, "0")}')
             page = pdf.pages[page_number]
             document = parse_page(page)
-            save_document(page.page_number, document, out)
-            print_classification(page, document, out)
+            # print_classification(page, document, out)
+            documents.append(document)
+            # save_document(page.page_number, document, out)
             # save_page(p, out)
             # print_image(cropped, p, out)
             # print_classification(cropped, document, out)
+    export(out, documents)
 
 
 def parse_page(page) -> Document:
@@ -63,7 +68,7 @@ def save_document(page_number: int, document: Document, out: str):
 
 def print_classification(page: Page, document: Document, out: str):
     name = str(page.page_number).rjust(3, "0") + ".jpeg"
-    filepath = os.path.join(out, "classification", name)
+    filepath = os.path.join(out, "debug", name)
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
     with open(filepath, 'w') as file:
         img: PageImage = page.to_image(resolution=150)

@@ -37,8 +37,9 @@ def page_19(rh_book):
 
 
 def test_print_page(rh_book, out_directory):
-    # extract(rh_book, out_directory, [39])
-    extract(rh_book, out_directory, range(50))
+    # extract(rh_book, out_directory, [199, 200, 201])
+    # extract(rh_book, out_directory, range(50))
+    extract(rh_book, out_directory)
 
 
 def test_validate_titles(page_19):
